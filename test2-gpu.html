@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GPU Stress Test</title>
+    <style>
+        #status {
+            font-family: monospace;
+            white-space: pre-wrap;
+            padding: 10px;
+            border: 1px solid #ccc;
+            height: 400px;
+            overflow: auto;
+            background: #1a1a1a;
+            color: #00ff00;
+        }
+        .progress {
+            width: 100%;
+            background: #333;
+            padding: 2px;
+            border-radius: 3px;
+            margin: 5px 0;
+        }
+        .progress-bar {
+            height: 20px;
+            background: #ff0000;
+            width: 0%;
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+        body {
+            background: #000;
+            color: #fff;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h2>⚠️ GPU Stress Test Console ⚠️</h2>
+    <div>
+        <span>GPU Usage: <span id="gpu">0</span>%</span>
+        <span>Attack Vectors: <span id="vectors">0</span></span>
+    </div>
+    <div id="status">[System Initializing...]</div>
+
+<script>
+class DoomsdayLogger {
+    constructor() {
+        this.logElement = document.getElementById('status');
+        this.metricElements = {
+            gpu: document.getElementById('gpu'),
+            vectors: document.getElementById('vectors')
+        };
+        this.attackVectorCount = 0;
+    }
+
+    log(message, type = 'INFO') {
+        const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+        const colorMap = {
+            'INFO': '#00ff00',
+            'WARN': '#ffff00',
+            'ERROR': '#ff0000',
+            'CRITICAL': '#ff00ff'
+        };
+        this.logElement.innerHTML += 
+            `<span style="color: ${colorMap[type]}">[${timestamp}] ${message}</span>\n`;
+        this.logElement.scrollTop = this.logElement.scrollHeight;
+    }
+
+    updateMetrics() {
+        setInterval(() => {
+            this.metricElements.gpu.textContent = 
+                Math.floor(Math.random() * 30 + 70);
+            this.metricElements.vectors.textContent = 
+                this.attackVectorCount;
+        }, 1000);
+    }
+}
+
+class GPUTest {
+    constructor(logger) {
+        this.logger = logger;
+    }
+
+    start() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 8192;
+        canvas.height = 8192;
+        document.body.appendChild(canvas);
+        
+        const gl = canvas.getContext('webgl2');
+        const texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        
+        setInterval(() => {
+            gl.texImage2D(
+                gl.TEXTURE_2D, 0, gl.RGBA, 8192, 8192, 0,
+                gl.RGBA, gl.UNSIGNED_BYTE, null
+            );
+            gl.generateMipmap(gl.TEXTURE_2D);
+            this.logger.log('GPU texture memory injected with 256MB noise data', 'WARN');
+            this.logger.attackVectorCount++;
+        }, 100);
+        
+        this.logger.updateMetrics();
+    }
+}
+
+// Auto-start test
+const logger = new DoomsdayLogger();
+const test = new GPUTest(logger);
+setTimeout(() => test.start(), 1000);
+</script>
+</body>
+</html>
