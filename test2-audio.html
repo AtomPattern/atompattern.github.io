@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Audio Stress Test</title>
+    <style>
+        #status {
+            font-family: monospace;
+            white-space: pre-wrap;
+            padding: 10px;
+            border: 1px solid #ccc;
+            height: 400px;
+            overflow: auto;
+            background: #1a1a1a;
+            color: #00ff00;
+        }
+        .progress {
+            width: 100%;
+            background: #333;
+            padding: 2px;
+            border-radius: 3px;
+            margin: 5px 0;
+        }
+        .progress-bar {
+            height: 20px;
+            background: #ff0000;
+            width: 0%;
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+        body {
+            background: #000;
+            color: #fff;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h2>⚠️ Audio Stress Test Console ⚠️</h2>
+    <div>
+        <span>Audio Load: <span id="audio">0</span>%</span>
+        <span>Attack Vectors: <span id="vectors">0</span></span>
+    </div>
+    <div id="status">[System Initializing...]</div>
+
+<script>
+class DoomsdayLogger {
+    constructor() {
+        this.logElement = document.getElementById('status');
+        this.metricElements = {
+            audio: document.getElementById('audio'),
+            vectors: document.getElementById('vectors')
+        };
+        this.attackVectorCount = 0;
+    }
+
+    log(message, type = 'INFO') {
+        const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+        const colorMap = {
+            'INFO': '#00ff00',
+            'WARN': '#ffff00',
+            'ERROR': '#ff0000',
+            'CRITICAL': '#ff00ff'
+        };
+        this.logElement.innerHTML += 
+            `<span style="color: ${colorMap[type]}">[${timestamp}] ${message}</span>\n`;
+        this.logElement.scrollTop = this.logElement.scrollHeight;
+    }
+
+    updateMetrics() {
+        setInterval(() => {
+            this.metricElements.audio.textContent = 
+                Math.floor(Math.random() * 30 + 70);
+            this.metricElements.vectors.textContent = 
+                this.attackVectorCount;
+        }, 1000);
+    }
+}
+
+class AudioTest {
+    constructor(logger) {
+        this.logger = logger;
+    }
+
+    start() {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        const createFeedback = () => {
+            const oscillator = ctx.createOscillator();
+            const gain = ctx.createGain();
+            oscillator.connect(gain);
+            gain.connect(ctx.destination);
+            oscillator.frequency.value = 20000;
+            gain.gain.value = 0.8;
+            oscillator.start();
+            
+            this.logger.log('High frequency audio feedback initiated', 'WARN');
+            this.logger.attackVectorCount++;
+            
+            setTimeout(() => oscillator.stop(), 5000);
+        };
+        
+        setInterval(createFeedback, 3000);
+        this.logger.updateMetrics();
+    }
+}
+
+// Auto-start test
+const logger = new DoomsdayLogger();
+const test = new AudioTest(logger);
+setTimeout(() => test.start(), 1000);
+</script>
+</body>
+</html>
