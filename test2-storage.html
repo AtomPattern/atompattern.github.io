@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Storage Stress Test</title>
+    <style>
+        #status {
+            font-family: monospace;
+            white-space: pre-wrap;
+            padding: 10px;
+            border: 1px solid #ccc;
+            height: 400px;
+            overflow: auto;
+            background: #1a1a1a;
+            color: #00ff00;
+        }
+        .progress {
+            width: 100%;
+            background: #333;
+            padding: 2px;
+            border-radius: 3px;
+            margin: 5px 0;
+        }
+        .progress-bar {
+            height: 20px;
+            background: #ff0000;
+            width: 0%;
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+        body {
+            background: #000;
+            color: #fff;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h2>⚠️ Storage Stress Test Console ⚠️</h2>
+    <div>
+        Storage Used: <span id="usage">0</span> MB
+        <div class="progress">
+            <div class="progress-bar" id="progress"></div>
+        </div>
+    </div>
+    <div>
+        <span>Memory Load: <span id="memory">0</span>%</span>
+        <span>Attack Vectors: <span id="vectors">0</span></span>
+    </div>
+    <div id="status">[System Initializing...]</div>
+
+<script>
+class DoomsdayLogger {
+    constructor() {
+        this.logElement = document.getElementById('status');
+        this.metricElements = {
+            memory: document.getElementById('memory'),
+            vectors: document.getElementById('vectors')
+        };
+        this.attackVectorCount = 0;
+        this.storageUsed = 0;
+    }
+
+    log(message, type = 'INFO') {
+        const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+        const colorMap = {
+            'INFO': '#00ff00',
+            'WARN': '#ffff00',
+            'ERROR': '#ff0000',
+            'CRITICAL': '#ff00ff'
+        };
+        this.logElement.innerHTML += 
+            `<span style="color: ${colorMap[type]}">[${timestamp}] ${message}</span>\n`;
+        this.logElement.scrollTop = this.logElement.scrollHeight;
+    }
+
+    updateMetrics() {
+        setInterval(() => {
+            // Update memory metrics
+            this.metricElements.memory.textContent = 
+                Math.min(100, Math.round(performance.memory.usedJSHeapSize / 
+                performance.memory.jsHeapSizeLimit * 100));
+            
+            // Update attack vector count
+            this.metricElements.vectors.textContent = 
+                this.attackV
