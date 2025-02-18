@@ -224,23 +224,7 @@ class ApocalypseEngine {
 const logger = new DoomsdayLogger();
 const engine = new ApocalypseEngine(logger);
 
-setTimeout(() => {
-    engine.launch();
-    
-    // Launch audio attack
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const createFeedback = () => {
-        const oscillator = ctx.createOscillator();
-        const gain = ctx.createGain();
-        oscillator.connect(gain);
-        gain.connect(ctx.destination);
-        oscillator.frequency.value = 20000;
-        gain.gain.value = 0.8;
-        oscillator.start();
-        setTimeout(() => oscillator.stop(), 5000);
-    };
-    setInterval(createFeedback, 3000);
-}, 1000);
+
 </script>
 </body>
 </html>
