@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>WebView Security Auto Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f0f0f0;
+        }
+        .test-section {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e8e8e8;
+            border-radius: 3px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .success {
+            color: green;
+        }
+        .error {
+            color: red;
+        }
+        .info {
+            color: blue;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebView Security Auto Test</h1>
+    
+    <div class="test-section">
+        <h3>1. System Information</h3>
+        <div id="sysInfo" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>2. File System API Test</h3>
+        <div id="fsResult" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>3. XMLHttpRequest Local File Test</h3>
+        <div id="xhrResult" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>4. Directory Access Test</h3>
+        <div id="dirResult" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>5. File Write Test</h3>
+        <div id="writeResult" class="result"></div>
+    </div>
+
+    <script>
+        // 日志功能
+        function logResult(elementId, result, type = 'success') {
+            const element = document.getElementById(elementId);
+            const timestamp = new Date().toLocaleTimeString();
+            element.innerHTML += `<div class="${type}">[${timestamp}] ${result}</div>`;
+            // 自动滚动到底部
+            element.scrollTop = element.scrollHeight;
+        }
+
+        // 延时函数
+        function delay(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // 系统信息测试
+        async function testSystemInfo() {
+            logResult('sysInfo', 'Starting system information collection...', 'info');
+            
+            // User Agent
+            logResult('sysInfo', `UserAgent: ${navigator.userAgent}`);
+            
+            // WebView检测
+            logResult('sysInfo', `WebView Vendor: ${navigator.vendor || 'Unknown'}`);
+            
+            // 协议支持
+            logResult('sysInfo', `Protocol: ${window.location.protocol}`);
+            
+            // API可用性
+            const apis = [
+                'requestFileSystem',
+                'showDirectoryPicker',
+                'fetch',
+                'XMLHttpRequest'
+            ];
+            
+            apis.forEach(api => {
+                logResult('sysInfo', `API ${api}: ${window[api] ? 'Available' : 'Not Available'}`);
+            });
+        }
+
+        // 文件系统API测试
+        async function testFileSystem() {
+            logResult('fsResult', 'Starting File System API tests...', 'info');
+
+            const paths = [
+                '/data/data/',
+                '/data/data/com.larus.nova/',
+                '/sdcard/',
+                '/storage/',
+                '/storage/emulated/0/',
+                '/system/',
+                '.',
+                '..'
+            ];
+
+            for (const path of paths) {
+                try {
+                    const response = await fetch(`file://${path}`);
+                    logResult('fsResult', `Access to ${path}: ${response.status}`);
+                } catch (error) {
+                    logResult('fsResult', `Access denied to ${path}: ${error.message}`, 'error');
+                }
+                await delay(100); // 避免请求过快
+            }
+
+            // FileSystem API测试
+            if (window.requestFileSystem) {
+                window.requestFileSystem(window.TEMPORARY, 5*1024*1024, 
+                    function(fs) {
+                        logResult('fsResult', `FileSystem API available: ${fs.name}`);
+                    },
+                    function(error) {
+                        logResult('fsResult', `FileSystem API error: ${error.message}`, 'error');
+                    }
+                );
+            } else {
+                logResult('fsResult', 'FileSystem API not available', 'error');
+            }
+        }
+
+        // XHR文件访问测试
+        async function testXHRFileAccess() {
+            logResult('xhrResult', 'Starting XMLHttpRequest tests...', 'info');
+
+            const paths = [
+                '/data/data/com.larus.nova/files/',
+                '/data/data/com.larus.nova/databases/',
+                '/data/data/com.larus.nova/shared_prefs/',
+                '/sdcard/Download/',
+                '/storage/emulated/0/',
+                '/system/etc/',
+                'file:///data/local/tmp/'
+            ];
+
+            for (const path of paths) {
+                const xhr = new XMLHttpRequest();
+                try {
+                    xhr.open('GET', `file://${path}`, false);
+                    xhr.send();
+                    logResult('xhrResult', `XHR success for ${path}: ${xhr.status}`);
+                } catch (error) {
+                    logResult('xhrResult', `XHR failed for ${path}: ${error.message}`, 'error');
+                }
+                await delay(100);
+            }
+        }
+
+        // 目录访问测试
+        async function testDirectoryAccess() {
+            logResult('dirResult', 'Starting directory access tests...', 'info');
+
+            const paths = [
+                '/data/data/com.larus.nova/',
+                '/data/data/com.larus.nova/files/',
+                '/data/data/com.larus.nova/cache/',
+                '/sdcard/',
+                '/storage/emulated/0/',
+                '/system/'
+            ];
+
+            for (const path of paths) {
+                try {
+                    const response = await fetch(`file://${path}`);
+                    logResult('dirResult', `Directory listing for ${path}: ${response.status}`);
+                    
+                    // 尝试读取目录内容
+                    const text = await response.text();
+                    if (text) {
+                        logResult('dirResult', `Content available for ${path}`);
+                    }
+                } catch (error) {
+                    logResult('dirResult', `Cannot access directory ${path}: ${error.message}`, 'error');
+                }
+                await delay(100);
+            }
+        }
+
+        // 文件写入测试
+        async function testFileWrite() {
+            logResult('writeResult', 'Starting file write tests...', 'info');
+
+            const testContent = 'WebView Security Test Content';
+            const paths = [
+                '/data/data/com.larus.nova/test.txt',
+                '/data/data/com.larus.nova/files/test.txt',
+                '/sdcard/test.txt',
+                '/storage/emulated/0/test.txt',
+                './test.txt'
+            ];
+
+            // 测试直接写入
+            for (const path of paths) {
+                try {
+                    const response = await fetch(`file://${path}`, {
+                        method: 'PUT',
+                        body: testContent
+                    });
+                    logResult('writeResult', `Write attempt to ${path}: ${response.status}`);
+                } catch (error) {
+                    logResult('writeResult', `Write failed for ${path}: ${error.message}`, 'error');
+                }
+                await delay(100);
+            }
+
+            // 测试FileSystem API写入
+            if (window.requestFileSystem) {
+                window.requestFileSystem(window.TEMPORARY, 5*1024*1024, function(fs) {
+                    fs.root.getFile('test.txt', {create: true}, function(fileEntry) {
+                        fileEntry.createWriter(function(fileWriter) {
+                            const blob = new Blob([testContent], {type: 'text/plain'});
+                            fileWriter.write(blob);
+                            logResult('writeResult', `Write success via FileSystem API: ${fileEntry.fullPath}`);
+                        }, function(error) {
+                            logResult('writeResult', `Write error via FileSystem API: ${error.message}`, 'error');
+                        });
+                    }, function(error) {
+                        logResult('writeResult', `File creation error: ${error.message}`, 'error');
+                    });
+                });
+            }
+
+            // 测试下载功能
+            try {
+                const blob = new Blob([testContent], {type: 'text/plain'});
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'test.txt';
+                a.click();
+                window.URL.revokeObjectURL(url);
+                logResult('writeResult', 'Download attempt successful');
+            } catch (error) {
+                logResult('writeResult', `Download attempt failed: ${error.message}`, 'error');
+            }
+        }
+
+        // 主测试流程
+        async function runAllTests() {
+            logResult('sysInfo', 'Starting complete security test suite...', 'info');
+            
+            try {
+                await testSystemInfo();
+                await delay(500);
+                
+                await testFileSystem();
+                await delay(500);
+                
+                await testXHRFileAccess();
+                await delay(500);
+                
+                await testDirectoryAccess();
+                await delay(500);
+                
+                await testFileWrite();
+                
+                logResult('sysInfo', 'All tests completed.', 'info');
+            } catch (error) {
+                logResult('sysInfo', `Test suite error: ${error.message}`, 'error');
+            }
+        }
+
+        // 页面加载完成后自动开始测试
+        window.onload = runAllTests;
+    </script>
+</body>
+</html>
